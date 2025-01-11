@@ -2,10 +2,11 @@ import requests
 from bs4 import BeautifulSoup
 from telegram import Bot
 import time
+import os
 
 # Telegram bot token and chat ID
-BOT_TOKEN = "7971492257:AAGCOY0gtv6UrZ0cADBifYnhuGPLTRxdoS0"
-CHAT_ID = "954847172"  # Replace with your Telegram chat ID
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+CHAT_ID = os.getenv('CHAT_ID')  # Replace with your Telegram chat ID
 
 # URL to monitor
 URL = "https://www.stwdo.de/wohnen/aktuelle-wohnangebote"
@@ -22,7 +23,6 @@ def fetch_offers():
     no_offers_element = soup.find("header", class_="notification__header")
     
     if no_offers_element:
-        # Only print this if no offers are found
         no_offers_text = no_offers_element.get_text()
         if "No offers" in no_offers_text or "Keine Angebote" in no_offers_text:
             print("No offers available.")
