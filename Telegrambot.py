@@ -57,14 +57,10 @@ async def monitor_website():
     start_time = time.time()
     last_hourly_update_time = 0  # Tracks the last time an hourly update was sent
     offers_detected = False  # Tracks if offers have been detected
+    no_offer_message_sent = False  # Tracks if the initial "No offers" message has been sent
 
     while True:
         current_time = time.time()
-
-        # Initial "No offers" update after 2 minutes
-        if not offers_detected and current_time - start_time >= INITIAL_UPDATE_INTERVAL:
-            await send_message(bot, "No offers available at the moment.")
-            offers_detected = True  # Mark as sent to avoid repeated initial messages
 
         # Check for offers every 5 minutes
         if current_time % CHECK_INTERVAL < 1:  # Ensures checks happen every 5 minutes
@@ -72,12 +68,16 @@ async def monitor_website():
 
             if current_offers:
                 offers_detected = True
+                no_offer_message_sent = True  # Prevent further "No offers" messages
                 for offer in current_offers:
                     message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
                     await send_message(bot, message)
                 last_hourly_update_time = current_time  # Reset hourly update timer on new offers
-            else:
-                print("No new offers detected.")
+            elif not no_offer_message_sent:
+                # Initial "No offers" update after 2 minutes
+                if current_time - start_time >= INITIAL_UPDATE_INTERVAL:
+                    await send_message(bot, "No offers available at the moment.")
+                    no_offer_message_sent = True  # Mark as sent to avoid repeated messages
 
         # Send hourly updates if offers were detected
         if offers_detected and current_time - last_hourly_update_time >= HOURLY_UPDATE_INTERVAL:
