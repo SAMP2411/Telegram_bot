@@ -54,6 +54,7 @@ async def monitor_website():
     start_time = time.time()
     last_update_time = start_time
     schedule_index = 0
+    next_update_interval = UPDATE_SCHEDULE[schedule_index]
     has_completed_initial_schedule = False
 
     while True:
@@ -61,8 +62,7 @@ async def monitor_website():
 
         # Send periodic updates
         if not has_completed_initial_schedule:
-            next_interval = UPDATE_SCHEDULE[schedule_index]
-            if current_time - last_update_time >= next_interval:
+            if current_time - last_update_time >= next_update_interval:
                 # Check for offers
                 current_offers = fetch_offers()
                 if current_offers:
@@ -74,14 +74,17 @@ async def monitor_website():
 
                 # Update the schedule index
                 schedule_index += 1
+                if schedule_index < len(UPDATE_SCHEDULE):
+                    next_update_interval = UPDATE_SCHEDULE[schedule_index]
+                else:
+                    has_completed_initial_schedule = True
+                    next_update_interval = THREE_HOUR_INTERVAL
+
                 last_update_time = current_time
 
-                # If we've completed the initial schedule, switch to the 3-hour interval
-                if schedule_index >= len(UPDATE_SCHEDULE):
-                    has_completed_initial_schedule = True
         else:
             # After the initial schedule, send updates every 3 hours
-            if current_time - last_update_time >= THREE_HOUR_INTERVAL:
+            if current_time - last_update_time >= next_update_interval:
                 current_offers = fetch_offers()
                 if current_offers:
                     for offer in current_offers:
