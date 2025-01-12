@@ -4,11 +4,12 @@ from telegram import Bot
 from telegram.constants import ParseMode
 import time
 import threading
+import asyncio
 from flask import Flask
 
 # Telegram bot token and chat ID
-BOT_TOKEN = "YOUR_BOT_TOKEN"
-CHAT_ID = "YOUR_CHAT_ID"  # Replace with your Telegram chat ID
+BOT_TOKEN = "7971492257:AAGCOY0gtv6UrZ0cADBifYnhuGPLTRxdoS0"
+CHAT_ID = "954847172"
 
 # URL to monitor
 URL = "https://www.stwdo.de/wohnen/aktuelle-wohnangebote"
@@ -41,27 +42,29 @@ def fetch_offers():
 
 
 # Function to send Telegram message
-def send_message(bot, message):
-    bot.send_message(chat_id=CHAT_ID, text=message, parse_mode=ParseMode.HTML)
+async def send_message(bot, message):
+    await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode=ParseMode.HTML)
 
 
 # Monitor function to check for updates
-def monitor_website():
+async def monitor_website():
     bot = Bot(BOT_TOKEN)
+    
+    # Await bot connection and display bot name
+    bot_info = await bot.get_me()
+    print(f"Bot {bot_info['first_name']} connected successfully!")
+    
     start_time = time.time()
     last_update_time = time.time()
     hourly_update_sent = False  # Tracks if an hourly update has been sent
     offers_detected = False  # Tracks if offers have been detected
-
-    # Give some time for Flask to initialize before starting the monitoring loop
-    time.sleep(5)  # Sleep for 5 seconds to ensure Flask is ready to handle requests
 
     while True:
         current_time = time.time()
 
         # Check if it's time for the initial "No offers" update (after 2 minutes)
         if not hourly_update_sent and current_time - start_time >= INITIAL_UPDATE_INTERVAL:
-            send_message(bot, "No offers available at the moment.")
+            await send_message(bot, "No offers available at the moment.")
             hourly_update_sent = True  # Mark the initial update as sent
 
         # Check for offers every 5 minutes
@@ -72,11 +75,11 @@ def monitor_website():
                 offers_detected = True
                 for offer in current_offers:
                     message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
-                    send_message(bot, message)
+                    await send_message(bot, message)
 
             else:
                 if offers_detected:  # If offers were previously detected, send an update
-                    send_message(bot, "No offers available at the moment.")
+                    await send_message(bot, "No offers available at the moment.")
                 else:
                     print("No new offers detected.")
 
@@ -88,13 +91,13 @@ def monitor_website():
             current_offers = fetch_offers()
 
             if current_offers:
-                send_message(bot, "Offers are still available.")
+                await send_message(bot, "Offers are still available.")
             else:
-                send_message(bot, "No offers available at the moment.")
+                await send_message(bot, "No offers available at the moment.")
 
             last_update_time = time.time()  # Update the time for the last hourly update
 
-        time.sleep(1)  # Avoid high CPU usage
+        await asyncio.sleep(1)  # Avoid high CPU usage
 
 
 # Flask app to run with Render
@@ -102,9 +105,7 @@ app = Flask(__name__)
 
 # Start monitoring in a separate thread
 def start_monitoring():
-    thread = threading.Thread(target=monitor_website)
-    thread.daemon = True
-    thread.start()
+    threading.Thread(target=lambda: asyncio.run(monitor_website())).start()
 
 
 @app.route('/')
@@ -113,5 +114,5 @@ def home():
 
 
 if __name__ == '__main__':
-    start_monitoring()  # Start the monitoring thread
+    start_monitoring()
     app.run(host="0.0.0.0", port=8080)  # Render expects the app to run on port 8080
