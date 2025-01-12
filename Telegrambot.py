@@ -14,10 +14,9 @@ CHAT_ID = "954847172"
 # URL to monitor
 URL = "https://www.stwdo.de/wohnen/aktuelle-wohnangebote"
 
-# Intervals for updates (in seconds)
-INITIAL_UPDATE_INTERVAL = 120  # 2 minutes for the initial update
-CHECK_INTERVAL = 300  # 5 minutes for checking offers
-HOURLY_UPDATE_INTERVAL = 3600  # 1 hour for regular updates
+# Timed intervals for updates
+UPDATE_SCHEDULE = [0, 120, 300, 600, 1800, 3600]  # Immediate, 2m, 5m, 10m, 30m, 1h
+THREE_HOUR_INTERVAL = 10800  # 3 hours
 
 
 # Function to fetch offers from the website
@@ -49,14 +48,12 @@ async def send_message(bot, message):
 # Monitor function to check for updates
 async def monitor_website():
     bot = Bot(BOT_TOKEN)
-    
-    # Await bot connection and display bot name
     bot_info = await bot.get_me()
     print(f"Bot {bot_info['first_name']} connected successfully!")
-    
+
     start_time = time.time()
-    last_hourly_update_time = 0
-    initial_message_sent = False
+    schedule_index = 0
+    last_update_time = start_time
 
     while True:
         current_time = time.time()
@@ -64,24 +61,23 @@ async def monitor_website():
         # Check for offers
         current_offers = fetch_offers()
 
+        # Send an update message
         if current_offers:
             for offer in current_offers:
                 message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
                 await send_message(bot, message)
         else:
-            if not initial_message_sent and current_time - start_time >= INITIAL_UPDATE_INTERVAL:
-                await send_message(bot, "No offers available at the moment.")
-                initial_message_sent = True
+            await send_message(bot, "No offers available at the moment.")
 
-        # Hourly updates regardless of offers
-        if current_time - last_hourly_update_time >= HOURLY_UPDATE_INTERVAL:
-            if current_offers:
-                await send_message(bot, "Offers are still available.")
-            else:
-                await send_message(bot, "No offers available at the moment.")
-            last_hourly_update_time = current_time
+        # Determine the next update interval
+        if schedule_index < len(UPDATE_SCHEDULE) - 1:
+            next_interval = UPDATE_SCHEDULE[schedule_index + 1]
+            schedule_index += 1
+        else:
+            next_interval = THREE_HOUR_INTERVAL
 
-        await asyncio.sleep(CHECK_INTERVAL)  # Check every 5 minutes
+        last_update_time = current_time
+        await asyncio.sleep(next_interval)
 
 
 # Flask app to run with Render
@@ -99,4 +95,4 @@ def home():
 
 if __name__ == '__main__':
     start_monitoring()
-    app.run(host="0.0.0.0", port=8080)  # Render expects the app to run on port 8080
+    app.run(host="0.0
