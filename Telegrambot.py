@@ -14,9 +14,8 @@ CHAT_ID = "954847172"  # Replace with your Telegram chat ID
 URL = "https://www.stwdo.de/wohnen/aktuelle-wohnangebote"
 
 # Intervals for updates (in seconds)
-INITIAL_UPDATE_INTERVAL = 120  # 2 minutes for the initial "No offers" update
 CHECK_INTERVAL = 300  # 5 minutes for checking offers
-HOURLY_UPDATE_INTERVAL = 3600  # 1 hour for updates after detecting offers
+HOURLY_UPDATE_INTERVAL = 3600  # 1 hour for hourly updates
 
 # Create a Flask app
 app = Flask(__name__)
@@ -47,43 +46,33 @@ async def send_message(bot, message):
 
 # Monitor function to check for updates
 async def monitor_website(bot):
-    start_time = time.time()
     last_update_time = time.time()
-    hourly_update_sent = False  # Tracks if an hourly update has been sent
-    offers_detected = False  # Tracks if offers have been detected
+    offers_last_state = None  # Tracks the last known state of offers (None if no offers)
 
     while True:
         current_time = time.time()
-
-        # Check if it's time for the initial "No offers" update (after 2 minutes)
-        if not hourly_update_sent and current_time - start_time >= INITIAL_UPDATE_INTERVAL:
-            await send_message(bot, "No offers available at the moment.")
-            hourly_update_sent = True  # Mark the initial update as sent
 
         # Check for offers every 5 minutes
         if current_time % CHECK_INTERVAL < 1:  # Ensures checks happen every 5 minutes
             current_offers = fetch_offers()
 
             if current_offers:
-                offers_detected = True
-                for offer in current_offers:
-                    message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
-                    await send_message(bot, message)
+                if offers_last_state is None:  # If previously no offers, send a new offers update
+                    for offer in current_offers:
+                        message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
+                        await send_message(bot, message)
+
+                offers_last_state = current_offers  # Update last state to current offers
 
             else:
-                if offers_detected:  # If offers were previously detected, send an update
+                if offers_last_state is not None:  # If previously offers were detected, send "No offers" update
                     await send_message(bot, "No offers available at the moment.")
-                else:
-                    print("No new offers detected.")
 
-            # Reset hourly update tracking
-            last_update_time = time.time()
+                offers_last_state = None  # Update last state to no offers
 
-        # Send hourly updates if offers have been detected
-        if offers_detected and current_time - last_update_time >= HOURLY_UPDATE_INTERVAL:
-            current_offers = fetch_offers()
-
-            if current_offers:
+        # Send hourly updates regardless of changes
+        if current_time - last_update_time >= HOURLY_UPDATE_INTERVAL:
+            if offers_last_state:
                 await send_message(bot, "Offers are still available.")
             else:
                 await send_message(bot, "No offers available at the moment.")
@@ -97,4 +86,13 @@ async def monitor_website(bot):
 def start_monitor():
     bot = Bot(BOT_TOKEN)
     loop = asyncio.get_event_loop()
-    loop.create_task(mon
+    loop.create_task(monitor_website(bot))
+
+# Define a simple endpoint for health checks
+@app.route("/")
+def health_check():
+    return "Bot is running."
+
+# Main function to run the Flask app
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
