@@ -2,116 +2,94 @@ import requests
 from bs4 import BeautifulSoup
 from telegram import Bot
 from telegram.constants import ParseMode
-import time
-import threading
 import asyncio
 from flask import Flask
+import threading
 
-# Telegram bot token and chat ID
+# Telegram bot credentials
 BOT_TOKEN = "7971492257:AAGCOY0gtv6UrZ0cADBifYnhuGPLTRxdoS0"
 CHAT_ID = "954847172"
 
-# URL to monitor
+# Monitoring URL
 URL = "https://www.stwdo.de/wohnen/aktuelle-wohnangebote"
 
-# Timed intervals for updates
-UPDATE_SCHEDULE = [0, 120, 300, 600, 1800, 3600]  # Immediate, 2m, 5m, 10m, 30m, 1h
-THREE_HOUR_INTERVAL = 10800  # 3 hours
+UPDATE_INTERVAL = 120  # 2 minutes in seconds
 
 
-# Function to fetch offers from the website
 def fetch_offers():
-    response = requests.get(URL)
-    soup = BeautifulSoup(response.text, "html.parser")
+    """
+    Fetch and parse the website for offers.
+    Returns a list of offers or None if no offers are available.
+    """
+    try:
+        response = requests.get(URL)
+        soup = BeautifulSoup(response.text, "html.parser")
 
-    # Check for the presence of the "No offers" message
-    no_offers_element = soup.find("header", class_="notification__header")
-    if no_offers_element and "No offers" in no_offers_element.get_text():
-        return None  # No offers available
+        # Detect "No offers" message
+        no_offers_element = soup.find("header", class_="notification__header")
+        if no_offers_element and "No offers" in no_offers_element.get_text():
+            return None
 
-    # If offers are available, extract available offers (replace with actual classes)
-    offers = []
-    offer_elements = soup.select(".your-offer-class")  # Adjust this to match the actual offer element class
-    for offer in offer_elements:
-        title = offer.select_one(".title-class").get_text(strip=True)  # Adjust this as needed
-        link = offer.select_one("a")["href"]
-        offers.append({"title": title, "link": link})
+        # Extract available offers
+        offers = []
+        offer_elements = soup.select(".your-offer-class")  # Replace with actual class for offers
+        for offer in offer_elements:
+            title = offer.select_one(".title-class").get_text(strip=True)  # Adjust selector
+            link = offer.select_one("a")["href"]
+            offers.append({"title": title, "link": link})
 
-    return offers
+        return offers
+    except Exception as e:
+        print(f"Error fetching offers: {e}")
+        return None
 
 
-# Function to send Telegram message
 async def send_message(bot, message):
-    await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode=ParseMode.HTML)
+    """
+    Send a message to the Telegram bot.
+    """
+    try:
+        await bot.send_message(chat_id=CHAT_ID, text=message, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        print(f"Error sending message: {e}")
 
 
-# Monitor function to check for updates
 async def monitor_website():
+    """
+    Monitor the website and send updates every 2 minutes.
+    """
     bot = Bot(BOT_TOKEN)
     bot_info = await bot.get_me()
     print(f"Bot {bot_info['first_name']} connected successfully!")
 
-    start_time = time.time()
-    last_update_time = start_time
-    schedule_index = 0
-    next_update_interval = UPDATE_SCHEDULE[schedule_index]
-    has_completed_initial_schedule = False
-
     while True:
-        current_time = time.time()
+        # Fetch current offers
+        current_offers = fetch_offers()
 
-        # Send periodic updates
-        if not has_completed_initial_schedule:
-            if current_time - last_update_time >= next_update_interval:
-                # Check for offers
-                current_offers = fetch_offers()
-                if current_offers:
-                    for offer in current_offers:
-                        message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
-                        await send_message(bot, message)
-                else:
-                    await send_message(bot, "No offers available at the moment.")
-
-                # Update the schedule index
-                schedule_index += 1
-                if schedule_index < len(UPDATE_SCHEDULE):
-                    next_update_interval = UPDATE_SCHEDULE[schedule_index]
-                else:
-                    has_completed_initial_schedule = True
-                    next_update_interval = THREE_HOUR_INTERVAL
-
-                last_update_time = current_time
-
+        if current_offers:
+            for offer in current_offers:
+                message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
+                await send_message(bot, message)
         else:
-            # After the initial schedule, send updates every 3 hours
-            if current_time - last_update_time >= next_update_interval:
-                current_offers = fetch_offers()
-                if current_offers:
-                    for offer in current_offers:
-                        message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
-                        await send_message(bot, message)
-                else:
-                    await send_message(bot, "No offers available at the moment.")
+            await send_message(bot, "No offers available at the moment.")
 
-                last_update_time = current_time
-
-        # Avoid excessive CPU usage
-        await asyncio.sleep(10)
+        # Wait for the next interval
+        await asyncio.sleep(UPDATE_INTERVAL)
 
 
-# Flask app to run with Render
+# Flask application for Render
 app = Flask(__name__)
-
-# Start monitoring in a separate thread
-def start_monitoring():
-    threading.Thread(target=lambda: asyncio.run(monitor_website())).start()
 
 
 @app.route('/')
 def home():
-    return "Bot is running."
+    return "Bot is running and monitoring offers!"
+
+
+def start_monitoring():
+    threading.Thread(target=lambda: asyncio.run(monitor_website())).start()
 
 
 if __name__ == '__main__':
     start_monitoring()
-    app.run(host="0.0.0.0", port=8080)  # Render expects the app to run on port 8080
+    app.run(host="0.0.0.0", port=8080)
