@@ -99,6 +99,7 @@ app = Flask(__name__)
 def index():
     return "Telegram Bot is running!"
 
+# Initialize the bot and start monitoring when the application starts
 @app.before_first_request
 def before_first_request():
     bot = Bot(BOT_TOKEN)
