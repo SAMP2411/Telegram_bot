@@ -55,17 +55,16 @@ async def monitor_website():
     print(f"Bot {bot_info['first_name']} connected successfully!")
     
     start_time = time.time()
-    last_update_time = time.time()
-    hourly_update_sent = False  # Tracks if an hourly update has been sent
+    last_hourly_update_time = 0  # Tracks the last time an hourly update was sent
     offers_detected = False  # Tracks if offers have been detected
 
     while True:
         current_time = time.time()
 
-        # Check if it's time for the initial "No offers" update (after 2 minutes)
-        if not hourly_update_sent and current_time - start_time >= INITIAL_UPDATE_INTERVAL:
+        # Initial "No offers" update after 2 minutes
+        if not offers_detected and current_time - start_time >= INITIAL_UPDATE_INTERVAL:
             await send_message(bot, "No offers available at the moment.")
-            hourly_update_sent = True  # Mark the initial update as sent
+            offers_detected = True  # Mark as sent to avoid repeated initial messages
 
         # Check for offers every 5 minutes
         if current_time % CHECK_INTERVAL < 1:  # Ensures checks happen every 5 minutes
@@ -76,26 +75,14 @@ async def monitor_website():
                 for offer in current_offers:
                     message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
                     await send_message(bot, message)
-
+                last_hourly_update_time = current_time  # Reset hourly update timer on new offers
             else:
-                if offers_detected:  # If offers were previously detected, send an update
-                    await send_message(bot, "No offers available at the moment.")
-                else:
-                    print("No new offers detected.")
+                print("No new offers detected.")
 
-            # Reset hourly update tracking
-            last_update_time = time.time()
-
-        # Send hourly updates if offers have been detected
-        if offers_detected and current_time - last_update_time >= HOURLY_UPDATE_INTERVAL:
-            current_offers = fetch_offers()
-
-            if current_offers:
-                await send_message(bot, "Offers are still available.")
-            else:
-                await send_message(bot, "No offers available at the moment.")
-
-            last_update_time = time.time()  # Update the time for the last hourly update
+        # Send hourly updates if offers were detected
+        if offers_detected and current_time - last_hourly_update_time >= HOURLY_UPDATE_INTERVAL:
+            await send_message(bot, "Offers are still available.")
+            last_hourly_update_time = current_time  # Update hourly update time
 
         await asyncio.sleep(1)  # Avoid high CPU usage
 
