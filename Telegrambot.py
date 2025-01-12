@@ -52,32 +52,48 @@ async def monitor_website():
     print(f"Bot {bot_info['first_name']} connected successfully!")
 
     start_time = time.time()
-    schedule_index = 0
     last_update_time = start_time
+    schedule_index = 0
+    has_completed_initial_schedule = False
 
     while True:
         current_time = time.time()
 
-        # Check for offers
-        current_offers = fetch_offers()
+        # Send periodic updates
+        if not has_completed_initial_schedule:
+            next_interval = UPDATE_SCHEDULE[schedule_index]
+            if current_time - last_update_time >= next_interval:
+                # Check for offers
+                current_offers = fetch_offers()
+                if current_offers:
+                    for offer in current_offers:
+                        message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
+                        await send_message(bot, message)
+                else:
+                    await send_message(bot, "No offers available at the moment.")
 
-        # Send an update message
-        if current_offers:
-            for offer in current_offers:
-                message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
-                await send_message(bot, message)
+                # Update the schedule index
+                schedule_index += 1
+                last_update_time = current_time
+
+                # If we've completed the initial schedule, switch to the 3-hour interval
+                if schedule_index >= len(UPDATE_SCHEDULE):
+                    has_completed_initial_schedule = True
         else:
-            await send_message(bot, "No offers available at the moment.")
+            # After the initial schedule, send updates every 3 hours
+            if current_time - last_update_time >= THREE_HOUR_INTERVAL:
+                current_offers = fetch_offers()
+                if current_offers:
+                    for offer in current_offers:
+                        message = f"New Offer: <b>{offer['title']}</b>\n<a href='{offer['link']}'>View Offer</a>"
+                        await send_message(bot, message)
+                else:
+                    await send_message(bot, "No offers available at the moment.")
 
-        # Determine the next update interval
-        if schedule_index < len(UPDATE_SCHEDULE) - 1:
-            next_interval = UPDATE_SCHEDULE[schedule_index + 1]
-            schedule_index += 1
-        else:
-            next_interval = THREE_HOUR_INTERVAL
+                last_update_time = current_time
 
-        last_update_time = current_time
-        await asyncio.sleep(next_interval)
+        # Avoid excessive CPU usage
+        await asyncio.sleep(10)
 
 
 # Flask app to run with Render
